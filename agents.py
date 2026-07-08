@@ -60,7 +60,7 @@ def rag_agent(state: Dict[str, Any]) -> Dict[str, Any]:
 def sql_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     route = state["route"]
     if route in ["visibility_issue", "campaign_issue"]:
-        rows = query_sql(state["merchant_id"])
+        rows = query_sql(state["merchant_id"], route)
     else:
         rows = []
     return {"sql_results": rows}

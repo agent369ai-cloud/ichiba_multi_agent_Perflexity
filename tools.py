@@ -2,6 +2,8 @@
 from typing import List, Dict, Any
 
 import cohere
+import psycopg
+from psycopg.rows import dict_row
 from pinecone import Pinecone
 
 from config import settings
@@ -63,16 +65,66 @@ def search_documents(query: str) -> List[Dict[str, Any]]:
     except Exception:
         return _FALLBACK_DOCS
 
-def query_sql(merchant_id: str) -> List[Dict[str, Any]]:
-    return [
-        {
-            "source": "postgresql",
-            "source_type": "sql",
-            "confidence": 0.97,
-            "content": f"Merchant {merchant_id} listing status is pending_moderation and category is null.",
-            "metadata": {"table": "merchant_listings", "row_id": 556}
-        }
-    ]
+_FALLBACK_SQL = [
+    {
+        "source": "postgresql",
+        "source_type": "sql",
+        "confidence": 0.97,
+        "content": "Merchant listing status is pending_moderation and category is null.",
+        "metadata": {"table": "merchant_listings", "row_id": None}
+    }
+]
+
+def query_sql(merchant_id: str, route: str = "visibility_issue") -> List[Dict[str, Any]]:
+    try:
+        with psycopg.connect(settings.DATABASE_URL, row_factory=dict_row) as conn:
+            with conn.cursor() as cur:
+                if route == "campaign_issue":
+                    cur.execute(
+                        "SELECT row_id, campaign_id, campaign_status, rejection_reason "
+                        "FROM campaign_records WHERE merchant_id = %s "
+                        "ORDER BY updated_at DESC",
+                        (merchant_id,),
+                    )
+                    rows = cur.fetchall()
+                    return [
+                        {
+                            "source": "postgresql",
+                            "source_type": "sql",
+                            "confidence": 0.97,
+                            "content": (
+                                f"Campaign {row['campaign_id']} for merchant {merchant_id} is "
+                                f"{row['campaign_status']}"
+                                + (f" (reason: {row['rejection_reason']})" if row["rejection_reason"] else "")
+                            ),
+                            "metadata": {"table": "campaign_records", "row_id": row["row_id"]},
+                        }
+                        for row in rows
+                    ]
+                else:
+                    cur.execute(
+                        "SELECT row_id, product_id, listing_status, category, locale "
+                        "FROM merchant_listings WHERE merchant_id = %s "
+                        "ORDER BY updated_at DESC",
+                        (merchant_id,),
+                    )
+                    rows = cur.fetchall()
+                    return [
+                        {
+                            "source": "postgresql",
+                            "source_type": "sql",
+                            "confidence": 0.97,
+                            "content": (
+                                f"Merchant {merchant_id} listing {row['product_id']} status is "
+                                f"{row['listing_status']} and category is "
+                                f"{row['category'] or 'null'} (locale: {row['locale']})"
+                            ),
+                            "metadata": {"table": "merchant_listings", "row_id": row["row_id"]},
+                        }
+                        for row in rows
+                    ]
+    except Exception:
+        return _FALLBACK_SQL
 
 def call_listing_api(merchant_id: str) -> List[Dict[str, Any]]:
     return [

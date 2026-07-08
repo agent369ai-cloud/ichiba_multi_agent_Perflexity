@@ -8,47 +8,63 @@ A prototype multi-agent merchant support assistant built with FastAPI and a Lang
 - Pydantic request/response validation
 - Modular agent graph pipeline defined in `graph_flow.py`
 - Includes router, planner, memory, RAG, SQL, API, synthesizer, critic, and guardrail agents
-- Configurable model and OpenAI API key via environment variables
+- Synthesizer uses a real LLM call (Groq, OpenAI-compatible client)
+- RAG uses real semantic search (Cohere embeddings + Pinecone)
+- SQL uses a real Postgres database (via Docker Compose)
+- React (Vite) frontend in `frontend/`
+- Memory and the listing-status API are still mocked — no backing store/service wired up yet
 
 ## Requirements
 
 - Python 3.11+
+- Node.js 18+ (for the frontend)
+- Docker (for the local Postgres database)
 - `venv` or other virtual environment
-- OpenAI API key
+- API keys: Groq, Cohere, Pinecone
 
 ## Setup
 
-1. Create a virtual environment:
+1. Create a virtual environment and install dependencies:
 
 ```bash
 python -m venv .venv
-```
-
-2. Activate it:
-
-```powershell
-.venv\Scripts\Activate.ps1
-```
-
-3. Install dependencies:
-
-```bash
+source .venv/bin/activate   # .venv\Scripts\Activate.ps1 on Windows
 pip install -r requirements.txt
 ```
 
-4. Set the OpenAI API key:
+2. Create a `.env` file (see `.env` for the required keys: `GROQ_API_KEY`, `COHERE_API_KEY`, `PINECONE_API_KEY`, `PINECONE_ENV`).
 
-```powershell
-$env:OPENAI_API_KEY = "your_openai_api_key"
+3. Start the local Postgres database:
+
+```bash
+docker compose up -d
+```
+
+This creates the `merchant_listings` and `campaign_records` tables and seeds them from `db/init.sql` on first run.
+
+4. Create and seed the Pinecone index (one-time, or whenever you update the doc corpus):
+
+```bash
+python scripts/seed_pinecone.py
+```
+
+5. (Optional) Install and run the frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
 ```
 
 ## Configuration
 
-The app uses `config.py` for the following settings:
+The app uses `config.py` for the following settings (all read from `.env`):
 
-- `GROQ_API_KEY` - Groq API key (used via the OpenAI-compatible client)
-- `MODEL_NAME` - default `gpt-4o-mini`
-- `ENV` - environment mode
+- `GROQ_API_KEY`, `GROQ_API_BASE`, `MODEL_NAME` — LLM used by the synthesizer agent
+- `COHERE_API_KEY`, `COHERE_EMBED_MODEL` — embeddings for RAG
+- `PINECONE_API_KEY`, `PINECONE_ENV`, `PINECONE_INDEX_NAME` — vector search for RAG
+- `DATABASE_URL` — Postgres connection string for the SQL agent (defaults to the `docker-compose.yml` credentials)
+- `ENV` — environment mode
 
 ## Run
 
@@ -62,6 +78,16 @@ Then open:
 
 - Health check: `http://127.0.0.1:8000/`
 - Support endpoint: `http://127.0.0.1:8000/ask`
+- Interactive API docs: `http://127.0.0.1:8000/docs`
+- Frontend (if running): `http://127.0.0.1:5173`
+
+## Testing the agents
+
+`scripts/test_agents.py` drives the full LangGraph pipeline directly (no server needed) across all four routes, plus unit-style checks on the critic and guardrail agents:
+
+```bash
+python scripts/test_agents.py
+```
 
 ## API
 
@@ -107,7 +133,12 @@ Response body:
 - `models.py` — request/response and evidence models
 - `graph_flow.py` — agent workflow graph definition
 - `agents.py` — agent implementations (router, planner, memory, RAG, SQL, API, synthesizer, critic, guardrail)
+- `tools.py` — data-source integrations used by the agents (Pinecone/Cohere RAG, Postgres SQL, mocked API/memory)
 - `requirements.txt` — Python dependencies
+- `docker-compose.yml`, `db/init.sql` — local Postgres database for the SQL agent
+- `scripts/seed_pinecone.py` — creates and seeds the Pinecone index used for RAG
+- `scripts/test_agents.py` — drives the full agent pipeline across all routes for testing
+- `frontend/` — React (Vite) chat UI
 - `SampleRequest01.JSON`, `SampleRequest02.JSON` — sample requests
 
 ## Notes

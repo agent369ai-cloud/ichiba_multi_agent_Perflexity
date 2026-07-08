@@ -14,6 +14,9 @@ class Settings:
     PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "ichiba-support-docs")
     COHERE_API_KEY = os.getenv("COHERE_API_KEY", "")
     COHERE_EMBED_MODEL = os.getenv("COHERE_EMBED_MODEL", "embed-english-v3.0")
+    DATABASE_URL = os.getenv(
+        "DATABASE_URL", "postgresql://ichiba:ichiba_dev_pw@localhost:5432/ichiba"
+    )
     ENV = os.getenv("ENV", "dev")
 
 settings = Settings()
