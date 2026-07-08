@@ -1,4 +1,4 @@
-# Market Merchant Support Assistant (IMSA)
+# Market Merchant Support Assistant (MMSA)
 
 A prototype multi-agent merchant support assistant built with FastAPI and a LangGraph-based agent workflow. It accepts merchant queries and routes them across agents for planning, RAG, SQL retrieval, synthesis, and guardrail review.
 
