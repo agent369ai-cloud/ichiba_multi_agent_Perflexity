@@ -114,3 +114,7 @@ Response body:
 
 This is a proof-of-concept repository. You should secure API keys and validate external agent integrations before production use.
 
+## Contributing
+
+Contributions are welcome. Please see `CONTRIBUTING.md` for guidelines on reporting issues, submitting pull requests, and preparing code changes.
+
