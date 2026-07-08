@@ -3,7 +3,7 @@ from typing import Dict, Any, List
 from openai import OpenAI
 
 from config import settings
-from tools import search_documents, query_sql, call_listing_api, load_memory
+from tools import search_documents, query_sql, call_listing_api, load_memory, save_memory
 
 groq_client = OpenAI(api_key=settings.GROQ_API_KEY, base_url=settings.GROQ_API_BASE)
 
@@ -160,3 +160,13 @@ def guardrail_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     draft = state.get("draft_answer", "")
     safe_answer = draft.replace("internal_only", "[redacted]")
     return {"final_answer": safe_answer}
+
+def memory_writer_agent(state: Dict[str, Any]) -> Dict[str, Any]:
+    save_memory(
+        session_id=state.get("session_id"),
+        merchant_id=state["merchant_id"],
+        route=state.get("route", ""),
+        query=state["query"],
+        final_answer=state.get("final_answer", ""),
+    )
+    return {}

@@ -17,6 +17,18 @@ CREATE TABLE IF NOT EXISTS campaign_records (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS conversation_turns (
+    turn_id SERIAL PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    merchant_id TEXT NOT NULL,
+    route TEXT,
+    query TEXT NOT NULL,
+    final_answer TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_conversation_turns_session ON conversation_turns (session_id, created_at DESC);
+
 INSERT INTO merchant_listings (merchant_id, product_id, listing_status, category, locale) VALUES
     ('M123', 'P-9001', 'pending_moderation', NULL, 'jp'),
     ('M456', 'P-9002', 'active', 'home-goods', 'en'),

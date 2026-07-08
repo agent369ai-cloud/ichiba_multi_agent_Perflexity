@@ -1,7 +1,8 @@
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 import cohere
+import httpx
 import psycopg
 from psycopg.rows import dict_row
 from pinecone import Pinecone
@@ -126,26 +127,88 @@ def query_sql(merchant_id: str, route: str = "visibility_issue") -> List[Dict[st
     except Exception:
         return _FALLBACK_SQL
 
-def call_listing_api(merchant_id: str) -> List[Dict[str, Any]]:
-    return [
-        {
-            "source": "listing_status_api",
-            "source_type": "api",
-            "confidence": 0.93,
-            "content": f"Last indexing job for merchant {merchant_id} failed due to incomplete feed attributes.",
-            "metadata": {"timestamp": "2026-07-08T09:10:00Z"}
-        }
-    ]
+_FALLBACK_API = [
+    {
+        "source": "listing_status_api",
+        "source_type": "api",
+        "confidence": 0.93,
+        "content": "Last indexing job status could not be retrieved from the listing API.",
+        "metadata": {"timestamp": None}
+    }
+]
 
-def load_memory(session_id: str | None) -> List[Dict[str, Any]]:
+def call_listing_api(merchant_id: str) -> List[Dict[str, Any]]:
+    try:
+        resp = httpx.get(
+            f"{settings.LISTING_API_BASE_URL}/listings/{merchant_id}/indexing-status",
+            timeout=5,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        content = (
+            f"Last indexing job for merchant {merchant_id} (product {data['product_id']}) "
+            f"{data['last_indexing_job_status']}"
+        )
+        if data.get("failure_reason"):
+            content += f": {data['failure_reason']}"
+
+        return [
+            {
+                "source": "listing_status_api",
+                "source_type": "api",
+                "confidence": 0.93,
+                "content": content,
+                "metadata": {
+                    "timestamp": data.get("checked_at"),
+                    "status": data.get("last_indexing_job_status"),
+                },
+            }
+        ]
+    except Exception:
+        return _FALLBACK_API
+
+def load_memory(session_id: Optional[str]) -> List[Dict[str, Any]]:
     if not session_id:
         return []
-    return [
-        {
-            "source": "memory_store",
-            "source_type": "memory",
-            "confidence": 0.79,
-            "content": "Merchant previously reported feed upload issue yesterday.",
-            "metadata": {"session_id": session_id}
-        }
-    ]
+
+    try:
+        with psycopg.connect(settings.DATABASE_URL, row_factory=dict_row) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT query, final_answer, route, created_at FROM conversation_turns "
+                    "WHERE session_id = %s ORDER BY created_at DESC LIMIT 3",
+                    (session_id,),
+                )
+                rows = cur.fetchall()
+
+        return [
+            {
+                "source": "memory_store",
+                "source_type": "memory",
+                "confidence": 0.79,
+                "content": (
+                    f"Merchant previously asked (route: {row['route']}): \"{row['query']}\". "
+                    f"Answer given: {(row['final_answer'] or '')[:200]}"
+                ),
+                "metadata": {"session_id": session_id, "asked_at": row["created_at"].isoformat()},
+            }
+            for row in rows
+        ]
+    except Exception:
+        return []
+
+def save_memory(session_id: Optional[str], merchant_id: str, route: str, query: str, final_answer: str) -> None:
+    if not session_id:
+        return
+
+    try:
+        with psycopg.connect(settings.DATABASE_URL) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO conversation_turns (session_id, merchant_id, route, query, final_answer) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (session_id, merchant_id, route, query, final_answer),
+                )
+    except Exception:
+        pass

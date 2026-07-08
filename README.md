@@ -11,8 +11,9 @@ A prototype multi-agent merchant support assistant built with FastAPI and a Lang
 - Synthesizer uses a real LLM call (Groq, OpenAI-compatible client)
 - RAG uses real semantic search (Cohere embeddings + Pinecone)
 - SQL uses a real Postgres database (via Docker Compose)
+- Memory persists real conversation turns per session in Postgres
+- Listing-status API is a real standalone FastAPI microservice (`listing_api_service/`), called over HTTP
 - React (Vite) frontend in `frontend/`
-- Memory and the listing-status API are still mocked — no backing store/service wired up yet
 
 ## Requirements
 
@@ -40,7 +41,7 @@ pip install -r requirements.txt
 docker compose up -d
 ```
 
-This creates the `merchant_listings` and `campaign_records` tables and seeds them from `db/init.sql` on first run.
+This creates the `merchant_listings`, `campaign_records`, and `conversation_turns` tables and seeds the first two from `db/init.sql` on first run.
 
 4. Create and seed the Pinecone index (one-time, or whenever you update the doc corpus):
 
@@ -63,15 +64,23 @@ The app uses `config.py` for the following settings (all read from `.env`):
 - `GROQ_API_KEY`, `GROQ_API_BASE`, `MODEL_NAME` — LLM used by the synthesizer agent
 - `COHERE_API_KEY`, `COHERE_EMBED_MODEL` — embeddings for RAG
 - `PINECONE_API_KEY`, `PINECONE_ENV`, `PINECONE_INDEX_NAME` — vector search for RAG
-- `DATABASE_URL` — Postgres connection string for the SQL agent (defaults to the `docker-compose.yml` credentials)
+- `DATABASE_URL` — Postgres connection string for the SQL and memory agents (defaults to the `docker-compose.yml` credentials)
+- `LISTING_API_BASE_URL` — base URL of the listing-status microservice (defaults to `http://127.0.0.1:8100`)
 - `ENV` — environment mode
 
 ## Run
 
-Start the app with Uvicorn:
+Three processes, each in its own terminal:
 
 ```bash
+# 1. main app
 uvicorn app:app --reload --host 0.0.0.0 --port 8000
+
+# 2. listing-status microservice (used by the API agent)
+uvicorn listing_api_service.main:app --reload --host 0.0.0.0 --port 8100
+
+# 3. frontend (optional)
+cd frontend && npm run dev
 ```
 
 Then open:
@@ -79,6 +88,7 @@ Then open:
 - Health check: `http://127.0.0.1:8000/`
 - Support endpoint: `http://127.0.0.1:8000/ask`
 - Interactive API docs: `http://127.0.0.1:8000/docs`
+- Listing-status microservice: `http://127.0.0.1:8100/`
 - Frontend (if running): `http://127.0.0.1:5173`
 
 ## Testing the agents
@@ -132,10 +142,11 @@ Response body:
 - `config.py` — application settings
 - `models.py` — request/response and evidence models
 - `graph_flow.py` — agent workflow graph definition
-- `agents.py` — agent implementations (router, planner, memory, RAG, SQL, API, synthesizer, critic, guardrail)
-- `tools.py` — data-source integrations used by the agents (Pinecone/Cohere RAG, Postgres SQL, mocked API/memory)
+- `agents.py` — agent implementations (router, planner, memory, RAG, SQL, API, synthesizer, critic, guardrail, memory_writer)
+- `tools.py` — data-source integrations used by the agents (Pinecone/Cohere RAG, Postgres SQL, Postgres-backed memory, HTTP call to the listing microservice)
+- `listing_api_service/` — standalone FastAPI microservice mocking an external listing-status API, backed by the same Postgres data
 - `requirements.txt` — Python dependencies
-- `docker-compose.yml`, `db/init.sql` — local Postgres database for the SQL agent
+- `docker-compose.yml`, `db/init.sql` — local Postgres database for the SQL and memory agents
 - `scripts/seed_pinecone.py` — creates and seeds the Pinecone index used for RAG
 - `scripts/test_agents.py` — drives the full agent pipeline across all routes for testing
 - `frontend/` — React (Vite) chat UI

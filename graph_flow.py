@@ -11,6 +11,7 @@ from agents import (
     synthesizer_agent,
     critic_agent,
     guardrail_agent,
+    memory_writer_agent,
 )
 
 class GraphState(TypedDict, total=False):
@@ -42,6 +43,7 @@ def build_graph():
     graph.add_node("synthesizer", synthesizer_agent)
     graph.add_node("critic", critic_agent)
     graph.add_node("guardrail", guardrail_agent)
+    graph.add_node("memory_writer", memory_writer_agent)
 
     graph.set_entry_point("router")
     graph.add_edge("router", "planner")
@@ -62,6 +64,7 @@ def build_graph():
         END: END
     })
 
-    graph.add_edge("guardrail", END)
+    graph.add_edge("guardrail", "memory_writer")
+    graph.add_edge("memory_writer", END)
 
     return graph.compile()
