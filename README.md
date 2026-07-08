@@ -46,7 +46,7 @@ $env:OPENAI_API_KEY = "your_openai_api_key"
 
 The app uses `config.py` for the following settings:
 
-- `OPENAI_API_KEY` - OpenAI API key
+- `GROQ_API_KEY` - Groq API key (used via the OpenAI-compatible client)
 - `MODEL_NAME` - default `gpt-4o-mini`
 - `ENV` - environment mode
 

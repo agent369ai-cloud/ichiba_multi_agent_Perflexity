@@ -1,6 +1,11 @@
 from typing import Dict, Any, List
 
+from openai import OpenAI
+
+from config import settings
 from tools import search_documents, query_sql, call_listing_api, load_memory
+
+groq_client = OpenAI(api_key=settings.GROQ_API_KEY, base_url=settings.GROQ_API_BASE)
 
 def router_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     query = state["query"].lower()
@@ -68,16 +73,10 @@ def api_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         api_results = []
     return {"api_results": api_results}
 
-def synthesizer_agent(state: Dict[str, Any]) -> Dict[str, Any]:
-    evidence = []
-    evidence.extend(state.get("memory_results", []))
-    evidence.extend(state.get("doc_results", []))
-    evidence.extend(state.get("sql_results", []))
-    evidence.extend(state.get("api_results", []))
-
+def _template_answer(query: str, route: str, evidence: List[Dict[str, Any]]) -> str:
     answer_lines = [
-        f"Merchant query: {state['query']}",
-        f"Detected route: {state['route']}",
+        f"Merchant query: {query}",
+        f"Detected route: {route}",
         "Root-cause analysis based on collected evidence:"
     ]
 
@@ -92,9 +91,52 @@ def synthesizer_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         "3. Trigger re-indexing and verify status in merchant dashboard."
     ])
 
+    return "\n".join(answer_lines)
+
+def synthesizer_agent(state: Dict[str, Any]) -> Dict[str, Any]:
+    evidence = []
+    evidence.extend(state.get("memory_results", []))
+    evidence.extend(state.get("doc_results", []))
+    evidence.extend(state.get("sql_results", []))
+    evidence.extend(state.get("api_results", []))
+
+    query = state["query"]
+    route = state["route"]
+    evidence_block = "\n".join(
+        f"- [{item['source_type']}] {item['content']}" for item in evidence
+    )
+
+    try:
+        completion = groq_client.chat.completions.create(
+            model=settings.MODEL_NAME,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a merchant support assistant for an e-commerce marketplace. "
+                        "Given a merchant's query, its detected issue route, and evidence gathered "
+                        "from internal systems, write a concise root-cause analysis followed by a "
+                        "section titled exactly 'Recommended next steps:' containing a numbered list. "
+                        "Only rely on the evidence provided."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Merchant query: {query}\n"
+                        f"Detected route: {route}\n"
+                        f"Evidence:\n{evidence_block or '- none'}"
+                    ),
+                },
+            ],
+        )
+        draft_answer = completion.choices[0].message.content
+    except Exception:
+        draft_answer = _template_answer(query, route, evidence)
+
     return {
         "evidence": evidence,
-        "draft_answer": "\n".join(answer_lines)
+        "draft_answer": draft_answer
     }
 
 def critic_agent(state: Dict[str, Any]) -> Dict[str, Any]:
