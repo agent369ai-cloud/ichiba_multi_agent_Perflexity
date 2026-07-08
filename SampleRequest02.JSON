@@ -1,0 +1,54 @@
+{
+  "merchant_id": "M123",
+  "query": "Why is my product not visible in Japanese search results?",
+  "route": "visibility_issue",
+  "plan": [
+    "load memory context",
+    "search policy documents",
+    "check merchant listing in SQL",
+    "check indexing API status",
+    "synthesize answer"
+  ],
+  "evidence": [
+    {
+      "source": "memory_store",
+      "source_type": "memory",
+      "confidence": 0.79,
+      "content": "Merchant previously reported feed upload issue yesterday.",
+      "metadata": {
+        "session_id": "S001"
+      }
+    },
+    {
+      "source": "azure_ai_search",
+      "source_type": "document",
+      "confidence": 0.91,
+      "content": "Policy states that category mapping is required for product visibility in JP marketplace.",
+      "metadata": {
+        "doc_id": "POL-101",
+        "locale": "jp"
+      }
+    },
+    {
+      "source": "postgresql",
+      "source_type": "sql",
+      "confidence": 0.97,
+      "content": "Merchant M123 listing status is pending_moderation and category is null.",
+      "metadata": {
+        "table": "merchant_listings",
+        "row_id": 556
+      }
+    },
+    {
+      "source": "listing_status_api",
+      "source_type": "api",
+      "confidence": 0.93,
+      "content": "Last indexing job for merchant M123 failed due to incomplete feed attributes.",
+      "metadata": {
+        "timestamp": "2026-07-08T09:10:00Z"
+      }
+    }
+  ],
+  "final_answer": "Merchant query: Why is my product not visible in Japanese search results?\nDetected route: visibility_issue\nRoot-cause analysis based on collected evidence:\n- [memory] Merchant previously reported feed upload issue yesterday.\n- [document] Policy states that category mapping is required for product visibility in JP marketplace.\n- [sql] Merchant M123 listing status is pending_moderation and category is null.\n- [api] Last indexing job for merchant M123 failed due to incomplete feed attributes.\n\nRecommended next steps:\n1. Update missing category mapping.\n2. Re-submit product feed with required attributes.\n3. Trigger re-indexing and verify status in merchant dashboard.",
+  "status": "success"
+}
